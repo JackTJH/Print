@@ -23,6 +23,11 @@ class PrintManager(QObject):
 
     @pyqtSlot(str, str, str, str)
     def enqueue(self, filename: str, size: str, filetype: str, filepath: str):
+        import os as _os
+        _dbg = _os.path.join(_os.path.expanduser("~"), "Desktop", "_server_debug.log")
+        with open(_dbg, "a", encoding="utf-8") as _f:
+            from datetime import datetime as _dt
+            _f.write(f"{_dt.now().strftime('%H:%M:%S.%f')[:-3]} [PRINT] enqueue: {filename}\n")
         self._queue.append(filepath)
         self._process_next()
 

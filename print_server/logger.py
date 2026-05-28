@@ -32,6 +32,10 @@ class LogModel(QAbstractTableModel):
     @pyqtSlot(str, str, str)
     def add_entry(self, time: str, client: str, event: str):
         """Add a log entry. Thread-safe: callable from any thread via signal."""
+        import os as _os
+        _dbg = _os.path.join(_os.path.expanduser("~"), "Desktop", "_server_debug.log")
+        with open(_dbg, "a", encoding="utf-8") as _f:
+            _f.write(f"LOG_ADD: [{time}] [{client}] {event}\n")
         idx = len(self._rows)
         self.beginInsertRows(self.index(idx, 0), idx, idx)
         self._rows.append((time, client, event))
