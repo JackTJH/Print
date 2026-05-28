@@ -106,7 +106,13 @@ class ClientHandlerThread(QThread):
                     return
 
             self._send_ack()
-            time.sleep(0.1)  # 确保 ACK 发送出去
+            # 等客户端先关连接，避免客户端看到 ConnectionError
+            try:
+                self.sock.settimeout(2)
+                while self.sock.recv(1024):
+                    pass
+            except Exception:
+                pass
             filepath_saved = dest
             self.srv_log.emit(now(), ip, f"接收完成 ({self._fmt(filesize)})")
 
