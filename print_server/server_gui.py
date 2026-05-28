@@ -145,12 +145,13 @@ class ServerGUI(QMainWindow):
         if self._server is not None:
             return
 
-        self._server = TcpServerThread(host, port, self)
+        self._server = TcpServerThread(
+            host, port,
+            self.log_model, self.file_model, self._print_mgr,
+            self,
+        )
 
         # Wire signals
-        self._server.log.connect(self.log_model.add_entry)
-        self._server.file_received.connect(self.file_model.add_file)
-        self._server.file_received.connect(self._print_mgr.enqueue)
         self._server.error.connect(self._on_server_error)
 
         self._server.start()
