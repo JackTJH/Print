@@ -103,14 +103,7 @@ class ClientHandlerThread(QThread):
                     return
 
             self._send_ack()
-            # 优雅关闭：先关写端发 FIN，等客户端断连
-            self.sock.shutdown(socket.SHUT_WR)
-            try:
-                self.sock.settimeout(5)
-                while self.sock.recv(1024):
-                    pass
-            except Exception:
-                pass
+            # 不主动关连接，让客户端自然断开
             filepath_saved = dest
             self.srv_log.emit(now(), ip, f"接收完成 ({self._fmt(filesize)})")
 
