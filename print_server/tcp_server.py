@@ -59,13 +59,16 @@ class ClientHandlerThread(QThread):
 
     def run(self):
         ip = self.addr[0]
+        import sys, traceback
         try:
             self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             self.sock.settimeout(RECV_TIMEOUT)
 
             # Receive FILE_INFO
             self._emit_log(now(), ip, "等待上传信息...")
+            print(f"[SRV] {ip} 等待上传信息...", flush=True)
             cmd, payload = recv_frame(self.sock, self.buffer)
+            print(f"[SRV] {ip} 收到命令: {cmd:#x}", flush=True)
             self._emit_log(now(), ip, f"收到命令: {cmd:#x}")
             if cmd != Cmd.FILE_INFO:
                 self._send_error("协议错误: 等待文件信息")
@@ -95,10 +98,12 @@ class ClientHandlerThread(QThread):
             # Ready to receive data
             self._send_ready()
             self._emit_log(now(), ip, "已发送READY，等待数据块...")
+            print(f"[SRV] {ip} 已发送READY，等待数据块...", flush=True)
 
             # Receive file data
             os.makedirs(RECEIVED_DIR, exist_ok=True)
             dest = os.path.join(RECEIVED_DIR, filename)
+            print(f"[SRV] {ip} 保存路径: {dest}", flush=True)
             md5 = hashlib.md5()
             received_size = 0
             chunks_received = 0
@@ -113,6 +118,7 @@ class ClientHandlerThread(QThread):
                         md5.update(payload)
                         received_size += len(payload)
                         chunks_received += 1
+                        print(f"[SRV] {ip} 第{chunks_received}/{total_chunks}块: {len(payload)}字节", flush=True)
                         self._send_ready()
                     elif cmd == Cmd.ERROR:
                         self._emit_log(now(), ip,
@@ -141,10 +147,14 @@ class ClientHandlerThread(QThread):
 
         except ConnectionError:
             self._emit_log(now(), ip, "连接断开")
+            print(f"[SRV] {ip} ConnectionError", flush=True)
         except json.JSONDecodeError:
             self._emit_log(now(), ip, "协议错误: 无效的JSON")
+            print(f"[SRV] {ip} JSONDecodeError", flush=True)
         except Exception as e:
             self._emit_log(now(), ip, f"错误: {e}")
+            traceback.print_exc()
+            print(f"[SRV] {ip} 异常: {traceback.format_exc()}", flush=True)
         finally:
             self._cleanup()
 

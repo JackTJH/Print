@@ -54,7 +54,9 @@ class FileSenderThread(QThread):
                 "chunk_size": CHUNK_SIZE,
             }).encode("utf-8")
             sock.sendall(encode_frame(Cmd.FILE_INFO, info))
+            print(f"[CLI] 已发送FILE_INFO，等待READY...", flush=True)
             self._expect(sock, Cmd.READY)
+            print(f"[CLI] 收到READY，开始发送数据", flush=True)
             self.log.emit(f"开始发送: {filepath.name} ({self._fmt_size(filesize)})")
 
             # 2. Send chunks
