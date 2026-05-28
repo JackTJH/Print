@@ -4,11 +4,10 @@ import hashlib
 import json
 import os
 import socket
-import tempfile
 from datetime import datetime
 from pathlib import Path
 
-from PyQt5.QtCore import QThread, pyqtSignal, QMetaObject, Qt, Q_ARG
+from PyQt5.QtCore import QThread, pyqtSignal
 
 from common.constants import (
     Cmd, CHUNK_SIZE, RECV_TIMEOUT, MAX_FILE_SIZE,
@@ -24,54 +23,29 @@ def now() -> str:
 class ClientHandlerThread(QThread):
     """Handles one client connection: receives file and triggers print."""
 
-    def __init__(self, client_socket: socket.socket, addr: tuple,
-                 log_callback, file_callback, print_callback, parent=None):
+    srv_log = pyqtSignal(str, str, str)          # time, ip, message
+    file_done = pyqtSignal(str, str, str, str)   # filename, size, type, path
+
+    def __init__(self, client_socket: socket.socket, addr: tuple, parent=None):
         super().__init__(parent)
         self.sock = client_socket
         self.addr = addr
         self.buffer = bytearray()
-        self._log = log_callback
-        self._file_cb = file_callback
-        self._print_cb = print_callback
-
-    def _emit_log(self, t: str, ip: str, msg: str):
-        """Safely emit log to main thread via queued invocation."""
-        QMetaObject.invokeMethod(
-            self._log, "add_entry",
-            Qt.QueuedConnection,
-            Q_ARG(str, t), Q_ARG(str, ip), Q_ARG(str, msg))
-
-    def _emit_file(self, filename: str, size: str, ftype: str, path: str):
-        """Safely emit file received to main thread."""
-        QMetaObject.invokeMethod(
-            self._file_cb, "add_file",
-            Qt.QueuedConnection,
-            Q_ARG(str, filename), Q_ARG(str, size),
-            Q_ARG(str, ftype), Q_ARG(str, path))
-
-    def _emit_print(self, filename: str, size: str, ftype: str, path: str):
-        """Trigger print on main thread."""
-        QMetaObject.invokeMethod(
-            self._print_cb, "enqueue",
-            Qt.QueuedConnection,
-            Q_ARG(str, filename), Q_ARG(str, size),
-            Q_ARG(str, ftype), Q_ARG(str, path))
 
     def run(self):
         ip = self.addr[0]
-        import sys, traceback
+        filepath_saved = None
         try:
             self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             self.sock.settimeout(RECV_TIMEOUT)
 
-            # Receive FILE_INFO
-            self._emit_log(now(), ip, "等待上传信息...")
-            print(f"[SRV] {ip} 等待上传信息...", flush=True)
+            # 1. Receive FILE_INFO
+            self.srv_log.emit(now(), ip, "等待上传信息...")
             cmd, payload = recv_frame(self.sock, self.buffer)
-            print(f"[SRV] {ip} 收到命令: {cmd:#x}", flush=True)
-            self._emit_log(now(), ip, f"收到命令: {cmd:#x}")
+            self.srv_log.emit(now(), ip, f"收到命令: {cmd:#x}")
+
             if cmd != Cmd.FILE_INFO:
-                self._send_error("协议错误: 等待文件信息")
+                self._send_error("协议错误")
                 return
 
             info = json.loads(payload.decode("utf-8"))
@@ -79,33 +53,26 @@ class ClientHandlerThread(QThread):
             filesize = info["filesize"]
             filetype = info.get("filetype", "")
             total_chunks = info.get("total_chunks", 1)
-            self._emit_log(now(), ip, f"文件信息: {filename}, {filesize}B, {total_chunks}块")
+            self.srv_log.emit(now(), ip, f"文件: {filename} ({self._fmt(filesize)})")
 
-            # Validate
+            # 2. Validate
             ext = Path(filename).suffix.lower()
             if ext not in ALLOWED_EXTENSIONS:
-                self._send_error(f"不支持的文件类型: {ext}")
-                self._emit_log(now(), ip, f"拒绝: {filename} (类型不支持)")
+                self._send_error(f"不支持的类型: {ext}")
+                self.srv_log.emit(now(), ip, f"拒绝: 类型不支持")
                 return
-
             if filesize > MAX_FILE_SIZE:
                 self._send_error("文件过大")
-                self._emit_log(now(), ip, f"拒绝: {filename} (文件过大)")
+                self.srv_log.emit(now(), ip, "拒绝: 文件过大")
                 return
 
-            self._emit_log(now(), ip, f"验证通过: {filename} ({self._format_size(filesize)})")
-
-            # Ready to receive data
+            # 3. Receive file data
             self._send_ready()
-            self._emit_log(now(), ip, "已发送READY，等待数据块...")
-            print(f"[SRV] {ip} 已发送READY，等待数据块...", flush=True)
+            self.srv_log.emit(now(), ip, "已就绪，接收数据...")
 
-            # Receive file data
             os.makedirs(RECEIVED_DIR, exist_ok=True)
             dest = os.path.join(RECEIVED_DIR, filename)
-            print(f"[SRV] {ip} 保存路径: {dest}", flush=True)
             md5 = hashlib.md5()
-            received_size = 0
             chunks_received = 0
 
             with open(dest, "wb") as f:
@@ -116,47 +83,40 @@ class ClientHandlerThread(QThread):
                     elif cmd == Cmd.FILE_DATA:
                         f.write(payload)
                         md5.update(payload)
-                        received_size += len(payload)
                         chunks_received += 1
-                        print(f"[SRV] {ip} 第{chunks_received}/{total_chunks}块: {len(payload)}字节", flush=True)
                         self._send_ready()
                     elif cmd == Cmd.ERROR:
-                        self._emit_log(now(), ip,
-                                       f"客户端错误: {payload.decode('utf-8', errors='replace')}")
+                        self.srv_log.emit(now(), ip, "客户端错误")
                         return
                     else:
                         self._send_error(f"意外命令: {cmd:#x}")
                         return
 
-            # Verify checksum
+            # 4. Verify checksum
             if cmd == Cmd.FILE_COMPLETE:
                 complete_info = json.loads(payload.decode("utf-8"))
                 expected_md5 = complete_info.get("md5", "")
-                actual_md5 = md5.hexdigest()
-                if expected_md5 and actual_md5 != expected_md5:
+                if expected_md5 and md5.hexdigest() != expected_md5:
                     self._send_error("校验和不匹配")
-                    self._emit_log(now(), ip, f"校验失败: {filename}")
+                    self.srv_log.emit(now(), ip, "校验失败")
                     os.remove(dest)
                     return
 
             self._send_ack()
-            size_str = self._format_size(filesize)
-            self._emit_log(now(), ip, f"接收完成: {filename} ({size_str})")
-            self._emit_file(filename, size_str, filetype, dest)
-            self._emit_print(filename, size_str, filetype, dest)
+            filepath_saved = dest
+            self.srv_log.emit(now(), ip, f"接收完成 ({self._fmt(filesize)})")
 
         except ConnectionError:
-            self._emit_log(now(), ip, "连接断开")
-            print(f"[SRV] {ip} ConnectionError", flush=True)
-        except json.JSONDecodeError:
-            self._emit_log(now(), ip, "协议错误: 无效的JSON")
-            print(f"[SRV] {ip} JSONDecodeError", flush=True)
+            self.srv_log.emit(now(), ip, "连接断开")
         except Exception as e:
-            self._emit_log(now(), ip, f"错误: {e}")
-            traceback.print_exc()
-            print(f"[SRV] {ip} 异常: {traceback.format_exc()}", flush=True)
+            self.srv_log.emit(now(), ip, f"错误: {e}")
         finally:
             self._cleanup()
+            if filepath_saved:
+                filetype = Path(filepath_saved).suffix.lower().lstrip(".")
+                size = self._fmt(os.path.getsize(filepath_saved))
+                name = Path(filepath_saved).name
+                self.file_done.emit(name, size, filetype, filepath_saved)
 
     def disconnect(self):
         try:
@@ -184,7 +144,7 @@ class ClientHandlerThread(QThread):
             pass
 
     @staticmethod
-    def _format_size(size: int) -> str:
+    def _fmt(size: int) -> str:
         if size < 1024:
             return f"{size} B"
         elif size < 1024 * 1024:
@@ -197,24 +157,16 @@ class TcpServerThread(QThread):
     """Main server thread: accepts connections and spawns handler threads."""
 
     error = pyqtSignal(str)
+    new_handler = pyqtSignal(object)  # ClientHandlerThread
+    srv_log = pyqtSignal(str, str, str)
 
-    def __init__(self, host: str, port: int,
-                 log_model, file_model, print_manager, parent=None):
+    def __init__(self, host: str, port: int, parent=None):
         super().__init__(parent)
         self.host = host
         self.port = port
-        self._log_model = log_model
-        self._file_model = file_model
-        self._print_mgr = print_manager
         self._running = False
         self._server_socket = None
         self._handlers: list[ClientHandlerThread] = []
-
-    def _emit_log(self, t: str, ip: str, msg: str):
-        QMetaObject.invokeMethod(
-            self._log_model, "add_entry",
-            Qt.QueuedConnection,
-            Q_ARG(str, t), Q_ARG(str, ip), Q_ARG(str, msg))
 
     def run(self):
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -228,25 +180,22 @@ class TcpServerThread(QThread):
         self._server_socket.listen(5)
         self._server_socket.settimeout(1.0)
         self._running = True
-        self._emit_log(now(), "系统", f"服务已启动 {self.host}:{self.port}")
+        self.srv_log.emit(now(), "系统", f"服务已启动 {self.host}:{self.port}")
 
         while self._running:
             try:
                 client_sock, addr = self._server_socket.accept()
                 if len(self._handlers) >= MAX_CONNECTIONS:
                     client_sock.close()
-                    self._emit_log(now(), addr[0], "拒绝连接: 已达最大连接数")
+                    self.srv_log.emit(now(), addr[0], "拒绝: 连接数已满")
                     continue
 
-                handler = ClientHandlerThread(
-                    client_sock, addr,
-                    self._log_model, self._file_model, self._print_mgr,
-                    self,
-                )
+                handler = ClientHandlerThread(client_sock, addr, self)
                 handler.finished.connect(lambda h=handler: self._cleanup_handler(h))
                 handler.start()
                 self._handlers.append(handler)
-                self._emit_log(now(), addr[0], "已连接")
+                self.new_handler.emit(handler)
+                self.srv_log.emit(now(), addr[0], "已连接")
             except socket.timeout:
                 continue
             except Exception as e:
@@ -263,7 +212,7 @@ class TcpServerThread(QThread):
         for h in self._handlers[:]:
             h.disconnect()
         self.wait(3000)
-        self._emit_log(now(), "系统", "服务已停止")
+        self.srv_log.emit(now(), "系统", "服务已停止")
 
     def _cleanup_handler(self, handler: ClientHandlerThread):
         if handler in self._handlers:
