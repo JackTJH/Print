@@ -1,20 +1,53 @@
-"""Print manager: dispatches print jobs via Windows ShellExecute."""
+"""Print manager: dispatches print jobs asynchronously."""
 
 import os
 import subprocess
 import sys
 from pathlib import Path
 
-from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot, QTimer
+from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot, QTimer, QThread
 
-from common.constants import DIRECT_PRINT_TYPES, IMAGE_TYPES
+
+class PrintWorker(QThread):
+    """Runs the actual print command in a background thread."""
+    result = pyqtSignal(str, bool)  # filename, success
+
+    def __init__(self, filepath: str, parent=None):
+        super().__init__(parent)
+        self.filepath = filepath
+
+    def run(self):
+        path = Path(self.filepath)
+        name = path.name
+        ext = path.suffix.lower()
+
+        if not path.exists():
+            self.result.emit(name, False)
+            return
+
+        # Try ShellExecute "print" via subprocess (non-blocking)
+        try:
+            subprocess.run(
+                ["cmd", "/c", "start", "", "/min", "print", str(path)],
+                capture_output=True, timeout=30, shell=False,
+            )
+            self.result.emit(name, True)
+            return
+        except Exception:
+            pass
+
+        # Fallback: os.startfile
+        try:
+            os.startfile(str(path), "print")
+            self.result.emit(name, True)
+        except Exception:
+            self.result.emit(name, False)
 
 
 class PrintManager(QObject):
     """Handles printing received files. Lives on the main thread."""
 
     print_result = pyqtSignal(str, bool)
-    log = pyqtSignal(str, str, str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -23,11 +56,6 @@ class PrintManager(QObject):
 
     @pyqtSlot(str, str, str, str)
     def enqueue(self, filename: str, size: str, filetype: str, filepath: str):
-        import os as _os
-        _dbg = _os.path.join(_os.path.expanduser("~"), "Desktop", "_server_debug.log")
-        with open(_dbg, "a", encoding="utf-8") as _f:
-            from datetime import datetime as _dt
-            _f.write(f"{_dt.now().strftime('%H:%M:%S.%f')[:-3]} [PRINT] enqueue: {filename}\n")
         self._queue.append(filepath)
         self._process_next()
 
@@ -36,52 +64,12 @@ class PrintManager(QObject):
             return
         self._busy = True
         filepath = self._queue.pop(0)
-        try:
-            name = Path(filepath).name
-            success = self._print_file(filepath)
-            self.print_result.emit(name, success)
-        except Exception as e:
-            self.log.emit("", Path(filepath).name, f"打印异常: {e}")
-        QTimer.singleShot(500, self._on_print_done)
+        name = Path(filepath).name
+        worker = PrintWorker(filepath, self)
+        worker.result.connect(self._on_print_done)
+        worker.start()
 
-    def _on_print_done(self):
+    def _on_print_done(self, filename: str, success: bool):
+        self.print_result.emit(filename, success)
         self._busy = False
-        self._process_next()
-
-    def _print_file(self, filepath: str) -> bool:
-        path = Path(filepath)
-        ext = path.suffix.lower()
-
-        if not path.exists():
-            self.log.emit("", path.name, "打印失败: 文件不存在")
-            return False
-
-        # Strategy 1: win32api.ShellExecute "print"
-        try:
-            import win32api
-            result = win32api.ShellExecuteW(
-                None, "print", str(path), None, None, 0
-            )
-            if result > 32:
-                self.log.emit("", path.name, "已发送打印指令")
-                return True
-            # ShellExecute failed, log and fall through to fallback
-            error_codes = {
-                2: "文件未找到", 3: "路径未找到", 5: "拒绝访问",
-                8: "内存不足", 26: "共享冲突", 29: "设备忙",
-                31: "没有关联的程序", 32: "DLL 未找到",
-            }
-            err_msg = error_codes.get(result, f"错误码 {result}")
-            self.log.emit("", path.name, f"ShellExecute 失败 ({err_msg})，尝试备用方式...")
-        except ImportError:
-            self.log.emit("", path.name, "pywin32 未安装，使用备用方式...")
-
-        # Strategy 2: os.startfile "print"
-        try:
-            os.startfile(str(path), "print")
-            self.log.emit("", path.name, "已发送打印指令 (startfile)")
-            return True
-        except Exception as e:
-            self.log.emit("", path.name, f"startfile 失败: {e}")
-
-        return False
+        QTimer.singleShot(100, self._process_next)

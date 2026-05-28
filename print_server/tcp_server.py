@@ -35,23 +35,13 @@ class ClientHandlerThread(QThread):
     def run(self):
         ip = self.addr[0]
         filepath_saved = None
-        # Debug log to file
-        import sys as _sys
-        _dbg = os.path.join(os.path.expanduser("~"), "Desktop", "_server_debug.log")
-        def _log(msg):
-            from datetime import datetime as _dt
-            with open(_dbg, "a", encoding="utf-8") as _f:
-                _f.write(f"{_dt.now().strftime('%H:%M:%S.%f')[:-3]} [{ip}] {msg}\n")
         try:
-            _log("handler started")
             self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             self.sock.settimeout(RECV_TIMEOUT)
 
             # 1. Receive FILE_INFO
             self.srv_log.emit(now(), ip, "等待上传信息...")
-            _log("waiting FILE_INFO")
             cmd, payload = recv_frame(self.sock, self.buffer)
-            _log(f"got cmd={cmd:#x}")
             self.srv_log.emit(now(), ip, f"收到命令: {cmd:#x}")
 
             if cmd != Cmd.FILE_INFO:
@@ -126,10 +116,7 @@ class ClientHandlerThread(QThread):
                 filetype = Path(filepath_saved).suffix.lower().lstrip(".")
                 size = self._fmt(os.path.getsize(filepath_saved))
                 name = Path(filepath_saved).name
-                _log(f"emitting file_done: {name}")
                 self.file_done.emit(name, size, filetype, filepath_saved)
-                _log(f"file_done emitted")
-            _log("handler exiting")
 
     def disconnect(self):
         try:
@@ -151,6 +138,10 @@ class ClientHandlerThread(QThread):
             pass
 
     def _cleanup(self):
+        try:
+            self.sock.shutdown(socket.SHUT_RDWR)
+        except Exception:
+            pass
         try:
             self.sock.close()
         except Exception:
