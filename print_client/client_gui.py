@@ -33,6 +33,7 @@ class ClientGUI(QMainWindow):
         conn_layout.addWidget(QLabel("IP:"))
         self.ip_edit = QLineEdit()
         self.ip_edit.setPlaceholderText("例如 192.168.1.100")
+        self.ip_edit.setText("192.168.1.112")
         self.ip_edit.setFixedWidth(160)
         conn_layout.addWidget(self.ip_edit)
 
