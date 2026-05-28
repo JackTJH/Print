@@ -121,6 +121,7 @@ class ClientGUI(QMainWindow):
         self.progress.setValue(0)
         self.progress.setVisible(True)
         self.log_view.clear()
+        self.log_view.appendPlainText(f"目标: {host}:{port}")
 
         self._sender = FileSenderThread(host, port, filepath, self)
         self._sender.progress.connect(self._on_progress)
