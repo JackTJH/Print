@@ -1,8 +1,6 @@
 """Print manager: dispatches print jobs asynchronously."""
 
 import os
-import subprocess
-import sys
 from pathlib import Path
 
 from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot, QTimer, QThread
@@ -19,28 +17,15 @@ class PrintWorker(QThread):
     def run(self):
         path = Path(self.filepath)
         name = path.name
-        ext = path.suffix.lower()
 
         if not path.exists():
             self.result.emit(name, False)
             return
 
-        # Try ShellExecute "print" via subprocess (non-blocking)
-        try:
-            subprocess.run(
-                ["cmd", "/c", "start", "", "/min", "print", str(path)],
-                capture_output=True, timeout=30, shell=False,
-            )
-            self.result.emit(name, True)
-            return
-        except Exception:
-            pass
-
-        # Fallback: os.startfile
         try:
             os.startfile(str(path), "print")
             self.result.emit(name, True)
-        except Exception:
+        except Exception as e:
             self.result.emit(name, False)
 
 

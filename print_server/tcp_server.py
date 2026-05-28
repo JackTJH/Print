@@ -4,8 +4,6 @@ import hashlib
 import json
 import os
 import socket
-import struct
-import time
 from datetime import datetime
 from pathlib import Path
 
@@ -39,7 +37,6 @@ class ClientHandlerThread(QThread):
         filepath_saved = None
         try:
             self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-            self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 3))
             self.sock.settimeout(RECV_TIMEOUT)
 
             # 1. Receive FILE_INFO
@@ -106,9 +103,10 @@ class ClientHandlerThread(QThread):
                     return
 
             self._send_ack()
-            # 等客户端先关连接，避免客户端看到 ConnectionError
+            # 优雅关闭：先关写端发 FIN，等客户端断连
+            self.sock.shutdown(socket.SHUT_WR)
             try:
-                self.sock.settimeout(2)
+                self.sock.settimeout(5)
                 while self.sock.recv(1024):
                     pass
             except Exception:
