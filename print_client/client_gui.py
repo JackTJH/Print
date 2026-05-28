@@ -3,7 +3,7 @@
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QLineEdit, QSpinBox, QPushButton, QTextEdit,
+    QLabel, QLineEdit, QSpinBox, QPushButton, QPlainTextEdit,
     QProgressBar, QFileDialog, QGroupBox, QMessageBox,
 )
 
@@ -85,7 +85,7 @@ class ClientGUI(QMainWindow):
         # ---- Log ----
         log_group = QGroupBox("日志")
         log_layout = QVBoxLayout(log_group)
-        self.log_view = QTextEdit()
+        self.log_view = QPlainTextEdit()
         self.log_view.setReadOnly(True)
         self.log_view.setMaximumBlockCount(500)
         log_layout.addWidget(self.log_view)
@@ -140,7 +140,7 @@ class ClientGUI(QMainWindow):
             self.progress.setFormat(f"{pct}% ({self._fmt_size(sent)} / {self._fmt_size(total)})")
 
     def _on_log(self, msg: str):
-        self.log_view.append(msg)
+        self.log_view.appendPlainText(msg)
 
     def _on_done(self, success: bool):
         self._sender = None
