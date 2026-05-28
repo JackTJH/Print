@@ -41,6 +41,7 @@ class FileSenderThread(QThread):
 
             self.log.emit(f"连接到 {self.host}:{self.port}...")
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             sock.settimeout(10)
             sock.connect((self.host, self.port))
 
@@ -115,6 +116,7 @@ class FileSenderThread(QThread):
             chunk = sock.recv(65536)
             if not chunk:
                 raise ConnectionError("连接已断开")
+            self.log.emit(f"[调试] 收到 {len(chunk)} 字节: {chunk[:20].hex()}")
 
     @staticmethod
     def _fmt_size(size: int) -> str:

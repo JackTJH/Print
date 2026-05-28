@@ -60,6 +60,7 @@ class ClientHandlerThread(QThread):
     def run(self):
         ip = self.addr[0]
         try:
+            self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             self.sock.settimeout(RECV_TIMEOUT)
 
             # Receive FILE_INFO
