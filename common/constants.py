@@ -22,7 +22,8 @@ DIRECT_PRINT_TYPES = {".pdf", ".docx", ".xls", ".xlsx", ".doc", ".txt", ".csv"}
 IMAGE_TYPES = {".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif", ".gif"}
 
 RECEIVED_DIR = os.path.join(
-    os.path.expanduser("~"), "Desktop", "PrintReceived"
+    os.environ.get("APPDATA", os.path.expanduser("~")),
+    "PrintServer", "received"
 )
 
 
