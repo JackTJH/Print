@@ -31,9 +31,12 @@ class PrintManager(QObject):
             return
         self._busy = True
         filepath = self._queue.pop(0)
-        name = Path(filepath).name
-        success = self._print_file(filepath)
-        self.print_result.emit(name, success)
+        try:
+            name = Path(filepath).name
+            success = self._print_file(filepath)
+            self.print_result.emit(name, success)
+        except Exception as e:
+            self.log.emit("", Path(filepath).name, f"打印异常: {e}")
         QTimer.singleShot(500, self._on_print_done)
 
     def _on_print_done(self):
