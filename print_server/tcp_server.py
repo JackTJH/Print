@@ -4,6 +4,8 @@ import hashlib
 import json
 import os
 import socket
+import struct
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -37,6 +39,7 @@ class ClientHandlerThread(QThread):
         filepath_saved = None
         try:
             self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 3))
             self.sock.settimeout(RECV_TIMEOUT)
 
             # 1. Receive FILE_INFO
@@ -103,6 +106,7 @@ class ClientHandlerThread(QThread):
                     return
 
             self._send_ack()
+            time.sleep(0.1)  # 确保 ACK 发送出去
             filepath_saved = dest
             self.srv_log.emit(now(), ip, f"接收完成 ({self._fmt(filesize)})")
 
@@ -138,10 +142,6 @@ class ClientHandlerThread(QThread):
             pass
 
     def _cleanup(self):
-        try:
-            self.sock.shutdown(socket.SHUT_RDWR)
-        except Exception:
-            pass
         try:
             self.sock.close()
         except Exception:
