@@ -157,13 +157,16 @@ class TcpServerThread(QThread):
     """Main server thread: accepts connections and spawns handler threads."""
 
     error = pyqtSignal(str)
-    new_handler = pyqtSignal(object)  # ClientHandlerThread
     srv_log = pyqtSignal(str, str, str)
 
-    def __init__(self, host: str, port: int, parent=None):
+    def __init__(self, host: str, port: int,
+                 log_model, file_model, print_manager, parent=None):
         super().__init__(parent)
         self.host = host
         self.port = port
+        self._log_model = log_model
+        self._file_model = file_model
+        self._print_mgr = print_manager
         self._running = False
         self._server_socket = None
         self._handlers: list[ClientHandlerThread] = []
@@ -191,10 +194,13 @@ class TcpServerThread(QThread):
                     continue
 
                 handler = ClientHandlerThread(client_sock, addr, self)
+                # Connect signals BEFORE start so no events are lost
+                handler.srv_log.connect(self._log_model.add_entry)
+                handler.file_done.connect(self._file_model.add_file)
+                handler.file_done.connect(self._print_mgr.enqueue)
                 handler.finished.connect(lambda h=handler: self._cleanup_handler(h))
                 handler.start()
                 self._handlers.append(handler)
-                self.new_handler.emit(handler)
                 self.srv_log.emit(now(), addr[0], "已连接")
             except socket.timeout:
                 continue

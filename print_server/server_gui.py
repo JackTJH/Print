@@ -145,12 +145,13 @@ class ServerGUI(QMainWindow):
         if self._server is not None:
             return
 
-        self._server = TcpServerThread(host, port, self)
-
-        # Wire signals
+        self._server = TcpServerThread(
+            host, port,
+            self.log_model, self.file_model, self._print_mgr,
+            self,
+        )
         self._server.error.connect(self._on_server_error)
         self._server.srv_log.connect(self.log_model.add_entry)
-        self._server.new_handler.connect(self._on_new_handler)
 
         self._server.start()
         self.start_btn.setEnabled(False)
@@ -159,11 +160,6 @@ class ServerGUI(QMainWindow):
         self.port_spin.setEnabled(False)
         self.status_label.setText("● 运行中")
         self.status_label.setStyleSheet("color: green; font-weight: bold;")
-
-    def _on_new_handler(self, handler):
-        handler.srv_log.connect(self.log_model.add_entry)
-        handler.file_done.connect(self.file_model.add_file)
-        handler.file_done.connect(self._print_mgr.enqueue)
 
     def _stop_server(self):
         if self._server is None:
