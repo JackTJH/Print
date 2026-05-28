@@ -109,7 +109,9 @@ class ClientHandlerThread(QThread):
             self.sock.settimeout(RECV_TIMEOUT)
 
             # Receive FILE_INFO
+            self.log.emit(now(), ip, "等待上传信息...")
             cmd, payload = recv_frame(self.sock, self.buffer)
+            self.log.emit(now(), ip, f"收到命令: {cmd:#x}")
             if cmd != Cmd.FILE_INFO:
                 self._send_error("协议错误: 等待文件信息")
                 return
@@ -119,6 +121,7 @@ class ClientHandlerThread(QThread):
             filesize = info["filesize"]
             filetype = info.get("filetype", "")
             total_chunks = info.get("total_chunks", 1)
+            self.log.emit(now(), ip, f"文件信息: {filename}, {filesize}B, {total_chunks}块")
 
             # Validate
             ext = Path(filename).suffix.lower()
@@ -132,10 +135,11 @@ class ClientHandlerThread(QThread):
                 self.log.emit(now(), ip, f"拒绝: {filename} (文件过大)")
                 return
 
-            self.log.emit(now(), ip, f"接收中: {filename} ({self._format_size(filesize)})")
+            self.log.emit(now(), ip, f"验证通过: {filename} ({self._format_size(filesize)})")
 
             # Ready to receive data
             self._send_ready()
+            self.log.emit(now(), ip, "已发送READY，等待数据块...")
 
             # Receive file data
             os.makedirs(RECEIVED_DIR, exist_ok=True)
