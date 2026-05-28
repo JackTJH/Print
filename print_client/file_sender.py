@@ -83,13 +83,13 @@ class FileSenderThread(QThread):
             self.done.emit(True)
 
         except ConnectionRefusedError:
-            self.log.emit("连接被拒绝，请检查服务端是否已启动")
+            self.log.emit(f"连接被拒绝 ({self.host}:{self.port})，请检查服务端是否已启动")
             self.done.emit(False)
         except socket.timeout:
-            self.log.emit("连接超时")
+            self.log.emit(f"连接超时 ({self.host}:{self.port})")
             self.done.emit(False)
         except Exception as e:
-            self.log.emit(f"错误: {e}")
+            self.log.emit(f"错误: {type(e).__name__}: {e}")
             self.done.emit(False)
         finally:
             if sock:
