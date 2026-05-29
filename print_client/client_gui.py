@@ -4,11 +4,11 @@ import json
 import os
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QFont, QIcon, QPalette, QColor
+from PyQt5.QtGui import QFont, QIcon
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QLineEdit, QSpinBox, QPushButton, QPlainTextEdit,
-    QProgressBar, QFileDialog, QGroupBox, QMessageBox, QTextEdit,
+    QCheckBox, QLabel, QLineEdit, QSpinBox, QPushButton, QPlainTextEdit,
+    QProgressBar, QFileDialog, QGroupBox, QMessageBox,
 )
 
 from common.constants import DEFAULT_PORT
@@ -30,6 +30,17 @@ def _load_config() -> dict:
     return {}
 
 
+def _save_wifi_reminded():
+    try:
+        cfg = _load_config()
+        cfg["wifi_reminded"] = True
+        os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump(cfg, f, indent=2)
+    except Exception:
+        pass
+
+
 def _save_config(host: str, port: int):
     try:
         os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
@@ -44,6 +55,11 @@ class ClientGUI(QMainWindow):
         super().__init__()
         self.setWindowTitle("打印客户端")
         self.setMinimumSize(620, 580)
+        # Set window icon
+        icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                 "..", "..", "printer_icon.ico")
+        if os.path.exists(icon_path):
+            self.setWindowIcon(QIcon(icon_path))
         font = QFont()
         font.setPointSize(11)
         QApplication.instance().setFont(font)
@@ -52,6 +68,23 @@ class ClientGUI(QMainWindow):
         self._setup_ui()
         self._apply_style()
         self._load_saved_config()
+        self._show_wifi_reminder()
+
+    def _show_wifi_reminder(self):
+        cfg = _load_config()
+        if cfg.get("wifi_reminded"):
+            return
+        msg = QMessageBox(self)
+        msg.setWindowTitle("网络提示")
+        msg.setIcon(QMessageBox.Information)
+        msg.setText("请连接 WiFi：TP-LINK_lky无线网-杰克小辉")
+        msg.setInformativeText("确保本电脑与服务端在同一网络")
+        cb = QCheckBox("不再提示")
+        msg.setCheckBox(cb)
+        msg.setStandardButtons(QMessageBox.Ok)
+        msg.exec_()
+        if cb.isChecked():
+            _save_wifi_reminded()
 
     def _apply_style(self):
         self.setStyleSheet("""
