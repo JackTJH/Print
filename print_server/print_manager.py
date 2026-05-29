@@ -95,7 +95,7 @@ class PrintManager(QObject):
         self._busy = True
         filepath = self._queue.pop(0)
         name = Path(filepath).name
-        worker = PrintWorker(filepath, self)
+        worker = PrintWorker(filepath)
         worker.result.connect(self._on_print_done)
         worker.start()
 
