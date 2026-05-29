@@ -7,7 +7,7 @@ import socket
 from datetime import datetime
 from pathlib import Path
 
-from PyQt5.QtCore import QThread, pyqtSignal
+from PyQt5.QtCore import QThread, Qt, pyqtSignal
 
 from common.constants import (
     Cmd, CHUNK_SIZE, RECV_TIMEOUT, MAX_FILE_SIZE,
@@ -196,9 +196,10 @@ class TcpServerThread(QThread):
 
                 handler = ClientHandlerThread(client_sock, addr, self)
                 # Connect signals BEFORE start so no events are lost
-                handler.srv_log.connect(self._log_model.add_entry)
-                handler.file_done.connect(self._file_model.add_file)
-                handler.file_done.connect(self._print_mgr.enqueue)
+                # Use Qt.QueuedConnection to ensure slots run in main thread
+                handler.srv_log.connect(self._log_model.add_entry, Qt.QueuedConnection)
+                handler.file_done.connect(self._file_model.add_file, Qt.QueuedConnection)
+                handler.file_done.connect(self._print_mgr.enqueue, Qt.QueuedConnection)
                 handler.finished.connect(lambda h=handler: self._cleanup_handler(h))
                 handler.start()
                 self._handlers.append(handler)
