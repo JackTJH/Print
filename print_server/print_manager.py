@@ -3,7 +3,6 @@
 import os
 import queue
 import subprocess
-import tempfile
 import threading
 import time
 from pathlib import Path
@@ -13,24 +12,6 @@ from PyQt5.QtCore import QObject, pyqtSignal, QTimer
 
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif", ".gif"}
 PDF_EXT = ".pdf"
-
-
-def _find_edge() -> str | None:
-    paths = [
-        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
-        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
-    ]
-    for p in paths:
-        if os.path.exists(p):
-            return p
-    try:
-        result = subprocess.run(["where", "msedge"],
-                                capture_output=True, text=True, timeout=5)
-        if result.returncode == 0 and result.stdout.strip():
-            return result.stdout.strip().split("\n")[0]
-    except Exception:
-        pass
-    return None
 
 
 def _do_print(filepath: str) -> bool:
@@ -59,48 +40,45 @@ def _print_image(path: Path) -> bool:
 
 
 def _print_pdf(path: Path) -> bool:
-    """Print PDF via Edge --kiosk-printing (silent, no popup)."""
-    edge = _find_edge()
-    if not edge:
-        try:
-            os.startfile(str(path), "print")
-        except Exception:
-            pass
-        return False
+    """Print PDF: open in Edge, simulate Ctrl+P + Enter via SendInput."""
+    import ctypes
+    from ctypes import wintypes
 
-    # HTML wrapper: embed PDF and call window.print() after loading
-    file_url = str(path).replace("\\", "/")
-    html = f"""<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>Print</title></head>
-<body style="margin:0;overflow:hidden">
-<embed src="file:///{file_url}" type="application/pdf"
- style="position:fixed;top:0;left:0;width:100%;height:100%">
-<script>
-let c=0;
-let t=setInterval(()=>{{
- if(++c>8){{window.print();clearInterval(t);setTimeout(()=>{{window.close();}},6000);}}
-}},500);
-</script>
-</body></html>"""
-
+    # Open the PDF in default handler (Edge)
     try:
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".html",
-                                         delete=False, encoding="utf-8") as f:
-            f.write(html)
-            html_path = f.name
-
-        subprocess.Popen(
-            [edge, "--kiosk-printing", f"file:///{html_path.replace(chr(92), '/')}"],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        )
-        time.sleep(10)
-        try:
-            os.unlink(html_path)
-        except Exception:
-            pass
-        return True
+        os.startfile(str(path))
     except Exception:
         return False
+
+    time.sleep(3)  # Wait for Edge to open and load the PDF
+
+    # Simulate Ctrl+P to open print dialog
+    # Then Enter to confirm print
+    VK_CONTROL = 0x11
+    VK_P = 0x50
+    VK_RETURN = 0x0D
+    KEYEVENTF_KEYUP = 0x0002
+
+    user32 = ctypes.windll.user32
+
+    def press(key):
+        user32.keybd_event(key, 0, 0, 0)
+        time.sleep(0.05)
+        user32.keybd_event(key, 0, KEYEVENTF_KEYUP, 0)
+        time.sleep(0.05)
+
+    # Ctrl+P
+    user32.keybd_event(VK_CONTROL, 0, 0, 0)
+    time.sleep(0.1)
+    press(VK_P)
+    user32.keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0)
+    time.sleep(1.5)  # Wait for print dialog
+
+    # Enter to confirm
+    press(VK_RETURN)
+    time.sleep(3)  # Wait for print to complete
+
+    return True
 
 
 def _print_office(path: Path) -> bool:
