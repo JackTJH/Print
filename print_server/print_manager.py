@@ -78,6 +78,16 @@ def _print_pdf(path: Path) -> bool:
     press(VK_RETURN)
     time.sleep(3)  # Wait for print to complete
 
+    # Close Edge window with Alt+F4
+    VK_MENU = 0x12
+    VK_F4 = 0x73
+    user32.keybd_event(VK_MENU, 0, 0, 0)
+    time.sleep(0.1)
+    user32.keybd_event(VK_F4, 0, 0, 0)
+    time.sleep(0.05)
+    user32.keybd_event(VK_F4, 0, KEYEVENTF_KEYUP, 0)
+    user32.keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, 0)
+
     return True
 
 
