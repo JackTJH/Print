@@ -1,5 +1,9 @@
 """Client main window (PyQt5)."""
 
+import json
+import os
+import sys
+
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -10,6 +14,30 @@ from PyQt5.QtWidgets import (
 from common.constants import DEFAULT_PORT
 from .file_sender import FileSenderThread
 
+CONFIG_FILE = os.path.join(
+    os.environ.get("APPDATA", os.path.expanduser("~")),
+    "PrintClient", "config.json"
+)
+
+
+def _load_config() -> dict:
+    try:
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return {}
+
+
+def _save_config(host: str, port: int):
+    try:
+        os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump({"host": host, "port": port}, f, indent=2)
+    except Exception:
+        pass
+
 
 class ClientGUI(QMainWindow):
     def __init__(self):
@@ -19,6 +47,7 @@ class ClientGUI(QMainWindow):
         self._sender: FileSenderThread | None = None
 
         self._setup_ui()
+        self._load_saved_config()
 
     def _setup_ui(self):
         central = QWidget()
@@ -97,6 +126,13 @@ class ClientGUI(QMainWindow):
         hint.setStyleSheet("color: gray; font-size: 11px;")
         layout.addWidget(hint)
 
+    def _load_saved_config(self):
+        cfg = _load_config()
+        if cfg.get("host"):
+            self.ip_edit.setText(cfg["host"])
+        if cfg.get("port"):
+            self.port_spin.setValue(cfg["port"])
+
     def _browse(self):
         filters = (
             "支持的文件 (*.pdf *.docx *.xlsx *.doc *.xls *.txt *.csv "
@@ -115,6 +151,7 @@ class ClientGUI(QMainWindow):
 
         host = self.ip_edit.text().strip()
         port = self.port_spin.value()
+        _save_config(host, port)
 
         self.send_btn.setEnabled(False)
         self.cancel_btn.setEnabled(True)
