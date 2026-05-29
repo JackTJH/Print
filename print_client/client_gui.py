@@ -232,8 +232,8 @@ class ClientGUI(QMainWindow):
         help_text.setWordWrap(True)
         help_text.setStyleSheet("font-size: 16px; padding: 6px; background: transparent; border: none;")
         help_text.setText(
-            "1. 确认服务端（公共电脑）已启动 PrintServer.exe 并点击了「启动服务」\n"
-            "2. 输入服务端的 IP 地址和端口（默认 9090）\n"
+            "1. IP 地址默认为 192.168.1.112，如打印失败请到公共电脑查看实际 IP\n"
+            "2. 确认服务端（公共电脑）已启动并点击「启动服务」\n"
             "3. 点击「浏览」选择文件，再点击「发送」\n"
             "支持：PDF、DOCX、XLSX、图片等  |  两台电脑需在同一 WiFi 下"
         )
