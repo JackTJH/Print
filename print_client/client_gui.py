@@ -43,7 +43,10 @@ class ClientGUI(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("打印客户端")
-        self.setMinimumSize(580, 520)
+        self.setMinimumSize(620, 580)
+        font = QFont()
+        font.setPointSize(11)
+        QApplication.instance().setFont(font)
         self._sender: FileSenderThread | None = None
 
         self._setup_ui()
@@ -102,7 +105,8 @@ class ClientGUI(QMainWindow):
                 border: 1px solid #B0C4DE;
                 border-radius: 4px;
                 background: #FFFDE7;
-                font-size: 12px;
+                font-size: 14px;
+                line-height: 1.6;
             }
             QProgressBar {
                 border: 1px solid #B0C4DE;
@@ -202,7 +206,7 @@ class ClientGUI(QMainWindow):
         help_layout = QVBoxLayout(help_group)
         help_text = QTextEdit()
         help_text.setReadOnly(True)
-        help_text.setFixedHeight(80)
+        help_text.setFixedHeight(110)
         help_text.setHtml("""
 <b>使用步骤：</b><br>
 1. 确认服务端（公共电脑）已启动 <b>PrintServer.exe</b> 并点击了「启动服务」<br>
