@@ -191,32 +191,31 @@ class ClientGUI(QMainWindow):
         self.progress.setFixedHeight(22)
         layout.addWidget(self.progress)
 
+        # ---- Usage Instructions ----
+        help_group = QGroupBox("使用说明")
+        help_layout = QVBoxLayout(help_group)
+        help_layout.setContentsMargins(8, 4, 8, 4)
+        help_text = QLabel()
+        help_text.setWordWrap(True)
+        help_text.setStyleSheet("font-size: 14px; padding: 6px; background: transparent; border: none;")
+        help_text.setText(
+            "1. 确认服务端（公共电脑）已启动 PrintServer.exe 并点击了「启动服务」\n"
+            "2. 输入服务端的 IP 地址和端口（默认 9090）\n"
+            "3. 点击「浏览」选择文件，再点击「发送」\n"
+            "支持：PDF、DOCX、XLSX、图片等  |  两台电脑需在同一 WiFi 下"
+        )
+        help_layout.addWidget(help_text)
+        layout.addWidget(help_group)
+
         # ---- Log ----
         log_group = QGroupBox("日志")
         log_layout = QVBoxLayout(log_group)
         self.log_view = QPlainTextEdit()
         self.log_view.setReadOnly(True)
         self.log_view.setMaximumBlockCount(500)
-        self.log_view.setFixedHeight(100)
+        self.log_view.setFixedHeight(55)
         log_layout.addWidget(self.log_view)
         layout.addWidget(log_group)
-
-        # ---- Usage Instructions ----
-        help_group = QGroupBox("使用说明")
-        help_layout = QVBoxLayout(help_group)
-        help_layout.setContentsMargins(10, 4, 10, 4)
-        help_text = QLabel()
-        help_text.setWordWrap(True)
-        help_text.setStyleSheet("font-size: 13px; padding: 4px; background: transparent; border: none;")
-        help_text.setText(
-            "1. 确认服务端（公共电脑）已启动 PrintServer.exe 并点击了「启动服务」\n"
-            "2. 输入服务端的 IP 地址（可在服务端界面查看）和端口（默认 9090）\n"
-            "3. 点击「浏览」选择要打印的文件，再点击「发送」\n"
-            "4. 文件发送完成后，服务端会自动打印\n"
-            "支持：PDF、DOCX、XLSX、图片等  |  两台电脑需在同一 WiFi 下"
-        )
-        help_layout.addWidget(help_text)
-        layout.addWidget(help_group)
 
         # Supported types hint
         hint = QLabel("支持: PDF, DOCX, XLSX, DOC, XLS, TXT, CSV, PNG, JPG, BMP, TIFF, GIF")
