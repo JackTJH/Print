@@ -1,6 +1,7 @@
 """Server main window (PyQt5)."""
 
 import os
+import queue
 import socket
 import subprocess
 import sys
@@ -29,8 +30,11 @@ class ServerGUI(QMainWindow):
         self.log_model = LogModel(self)
         self.file_model = FileHistoryModel(self)
 
+        # Shared queue for print jobs (handler → main thread)
+        self._print_queue: queue.Queue = queue.Queue()
+
         # Print manager
-        self._print_mgr = PrintManager(self)
+        self._print_mgr = PrintManager(self._print_queue, self)
         self._print_mgr.print_result.connect(self.file_model.update_status)
         self._print_mgr.print_result.connect(self._on_print_result)
 
@@ -147,7 +151,7 @@ class ServerGUI(QMainWindow):
 
         self._server = TcpServerThread(
             host, port,
-            self.log_model, self.file_model, self._print_mgr,
+            self.log_model, self.file_model, self._print_queue,
             self,
         )
         self._server.error.connect(self._on_server_error)

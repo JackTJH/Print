@@ -3,6 +3,7 @@
 import hashlib
 import json
 import os
+import queue
 import socket
 from datetime import datetime
 from pathlib import Path
@@ -24,13 +25,14 @@ class ClientHandlerThread(QThread):
     """Handles one client connection: receives file and triggers print."""
 
     srv_log = pyqtSignal(str, str, str)          # time, ip, message
-    file_done = pyqtSignal(str, str, str, str)   # filename, size, type, path
 
-    def __init__(self, client_socket: socket.socket, addr: tuple, parent=None):
+    def __init__(self, client_socket: socket.socket, addr: tuple,
+                 print_queue: queue.Queue, parent=None):
         super().__init__(parent)
         self.sock = client_socket
         self.addr = addr
         self.buffer = bytearray()
+        self._print_queue = print_queue
 
     def run(self):
         ip = self.addr[0]
@@ -117,7 +119,7 @@ class ClientHandlerThread(QThread):
                 filetype = Path(filepath_saved).suffix.lower().lstrip(".")
                 size = self._fmt(os.path.getsize(filepath_saved))
                 name = Path(filepath_saved).name
-                self.file_done.emit(name, size, filetype, filepath_saved)
+                self._print_queue.put((name, size, filetype, filepath_saved))
 
     def disconnect(self):
         try:
@@ -161,13 +163,13 @@ class TcpServerThread(QThread):
     srv_log = pyqtSignal(str, str, str)
 
     def __init__(self, host: str, port: int,
-                 log_model, file_model, print_manager, parent=None):
+                 log_model, file_model, print_queue, parent=None):
         super().__init__(parent)
         self.host = host
         self.port = port
         self._log_model = log_model
         self._file_model = file_model
-        self._print_mgr = print_manager
+        self._print_queue = print_queue
         self._running = False
         self._server_socket = None
         self._handlers: list[ClientHandlerThread] = []
@@ -194,12 +196,9 @@ class TcpServerThread(QThread):
                     self.srv_log.emit(now(), addr[0], "拒绝: 连接数已满")
                     continue
 
-                handler = ClientHandlerThread(client_sock, addr, self)
+                handler = ClientHandlerThread(client_sock, addr, self._print_queue, self)
                 # Connect signals BEFORE start so no events are lost
-                # Use Qt.QueuedConnection to ensure slots run in main thread
                 handler.srv_log.connect(self._log_model.add_entry, Qt.QueuedConnection)
-                handler.file_done.connect(self._file_model.add_file, Qt.QueuedConnection)
-                handler.file_done.connect(self._print_mgr.enqueue, Qt.QueuedConnection)
                 handler.finished.connect(lambda h=handler: self._cleanup_handler(h))
                 handler.start()
                 self._handlers.append(handler)
