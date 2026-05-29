@@ -105,7 +105,9 @@ class ClientHandlerThread(QThread):
                     return
 
             self._send_ack()
-            # 不主动关连接，让客户端自然断开
+            # 等 200ms 确保 ACK 数据完全发出
+            import time
+            time.sleep(0.2)
             filepath_saved = dest
             self.srv_log.emit(now(), ip, f"接收完成 ({self._fmt(filesize)})")
 
