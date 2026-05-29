@@ -187,7 +187,6 @@ class ClientGUI(QMainWindow):
         if success:
             self.progress.setValue(100)
             self.progress.setFormat("完成!")
-            QMessageBox.information(self, "完成", "文件已发送成功，服务端正在打印。")
 
     def _reset_ui(self):
         self.send_btn.setEnabled(True)
