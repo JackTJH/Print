@@ -230,7 +230,7 @@ class ClientGUI(QMainWindow):
         help_layout.setContentsMargins(8, 4, 8, 4)
         help_text = QLabel()
         help_text.setWordWrap(True)
-        help_text.setStyleSheet("font-size: 14px; padding: 6px; background: transparent; border: none;")
+        help_text.setStyleSheet("font-size: 16px; padding: 6px; background: transparent; border: none;")
         help_text.setText(
             "1. 确认服务端（公共电脑）已启动 PrintServer.exe 并点击了「启动服务」\n"
             "2. 输入服务端的 IP 地址和端口（默认 9090）\n"
