@@ -17,14 +17,22 @@ class PrintWorker(QThread):
     def run(self):
         path = Path(self.filepath)
         name = path.name
+        ext = path.suffix.lower()
 
         if not path.exists():
             self.result.emit(name, False)
             return
 
         try:
-            os.startfile(str(path), "print")
-            self.result.emit(name, True)
+            if ext in {".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif", ".gif"}:
+                # 图片用 mspaint /p 静默打印，不弹窗
+                import subprocess
+                subprocess.run(["mspaint", "/p", str(path)],
+                               capture_output=True, timeout=30)
+                self.result.emit(name, True)
+            else:
+                os.startfile(str(path), "print")
+                self.result.emit(name, True)
         except Exception as e:
             self.result.emit(name, False)
 
