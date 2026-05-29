@@ -1,14 +1,17 @@
 """Print manager: dispatches print jobs asynchronously."""
 
 import os
+import subprocess
 from pathlib import Path
 
 from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot, QTimer, QThread
 
 
+IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif", ".gif"}
+
+
 class PrintWorker(QThread):
-    """Runs the actual print command in a background thread."""
-    result = pyqtSignal(str, bool)  # filename, success
+    result = pyqtSignal(str, bool)
 
     def __init__(self, filepath: str, parent=None):
         super().__init__(parent)
@@ -24,17 +27,51 @@ class PrintWorker(QThread):
             return
 
         try:
-            if ext in {".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif", ".gif"}:
-                # 图片用 mspaint /p 静默打印，不弹窗
-                import subprocess
-                subprocess.run(["mspaint", "/p", str(path)],
-                               capture_output=True, timeout=30)
-                self.result.emit(name, True)
+            if ext in IMAGE_EXTS:
+                self._print_image(path, name)
             else:
-                os.startfile(str(path), "print")
-                self.result.emit(name, True)
-        except Exception as e:
+                self._print_document(path, name)
+        except Exception:
             self.result.emit(name, False)
+
+    def _print_image(self, path: Path, name: str):
+        # mspaint /p 静默打印图片
+        subprocess.run(["mspaint", "/p", str(path)],
+                       capture_output=True, timeout=30)
+        self.result.emit(name, True)
+
+    def _print_document(self, path: Path, name: str):
+        # 策略1: os.startfile "print"
+        try:
+            os.startfile(str(path), "print")
+            self.result.emit(name, True)
+            return
+        except Exception:
+            pass
+
+        # 策略2: cmd start /print
+        try:
+            subprocess.run(["cmd", "/c", "start", "", "/print", str(path)],
+                           capture_output=True, timeout=30)
+            self.result.emit(name, True)
+            return
+        except Exception:
+            pass
+
+        # 策略3: PowerShell Start-Process -Verb Print
+        try:
+            subprocess.run([
+                "powershell", "-Command",
+                f"Start-Process -FilePath '{str(path)}' -Verb Print"
+            ], capture_output=True, timeout=30)
+            self.result.emit(name, True)
+            return
+        except Exception:
+            pass
+
+        # 策略4: 直接用默认程序打开
+        os.startfile(str(path))
+        self.result.emit(name, False)
 
 
 class PrintManager(QObject):
