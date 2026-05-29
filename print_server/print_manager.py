@@ -3,7 +3,9 @@
 import os
 import queue
 import subprocess
+import tempfile
 import threading
+import time
 from pathlib import Path
 
 from PyQt5.QtCore import QObject, pyqtSignal, QTimer
@@ -13,13 +15,22 @@ IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif", ".gif"}
 PDF_EXT = ".pdf"
 
 
-def _get_default_printer() -> str:
-    """Get the default printer name."""
+def _find_edge() -> str | None:
+    paths = [
+        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+    ]
+    for p in paths:
+        if os.path.exists(p):
+            return p
     try:
-        import win32print
-        return win32print.GetDefaultPrinter()
+        result = subprocess.run(["where", "msedge"],
+                                capture_output=True, text=True, timeout=5)
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip().split("\n")[0]
     except Exception:
-        return ""
+        pass
+    return None
 
 
 def _do_print(filepath: str) -> bool:
@@ -48,81 +59,52 @@ def _print_image(path: Path) -> bool:
 
 
 def _print_pdf(path: Path) -> bool:
-    """Print PDF using best available method."""
-
-    # Method 1: win32api "printto" with default printer
-    printer = _get_default_printer()
-    if printer:
+    """Print PDF via Edge --kiosk-printing (silent, no popup)."""
+    edge = _find_edge()
+    if not edge:
         try:
-            import win32api
-            result = win32api.ShellExecuteW(
-                None, "printto", str(path), f'"{printer}"', None, 0)
-            if result > 32:
-                return True
+            os.startfile(str(path), "print")
         except Exception:
             pass
+        return False
 
-    # Method 2: Adobe Reader /t (silent print)
-    adobe_paths = [
-        r"C:\Program Files\Adobe\Acrobat DC\Acrobat\Acrobat.exe",
-        r"C:\Program Files (x86)\Adobe\Acrobat DC\Acrobat\Acrobat.exe",
-        r"C:\Program Files\Adobe\Acrobat Reader DC\Reader\AcroRd32.exe",
-        r"C:\Program Files (x86)\Adobe\Acrobat Reader DC\Reader\AcroRd32.exe",
-    ]
-    for ap in adobe_paths:
-        if os.path.exists(ap):
-            try:
-                subprocess.run([ap, "/t", str(path), printer],
-                               capture_output=True, timeout=30)
-                return True
-            except Exception:
-                pass
+    # HTML wrapper: embed PDF and call window.print() after loading
+    file_url = str(path).replace("\\", "/")
+    html = f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Print</title></head>
+<body style="margin:0;overflow:hidden">
+<embed src="file:///{file_url}" type="application/pdf"
+ style="position:fixed;top:0;left:0;width:100%;height:100%">
+<script>
+let c=0;
+let t=setInterval(()=>{{
+ if(++c>8){{window.print();clearInterval(t);setTimeout(()=>{{window.close();}},6000);}}
+}},500);
+</script>
+</body></html>"""
 
-    # Method 3: os.startfile "print" (works if Adobe is default)
     try:
-        os.startfile(str(path), "print")
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".html",
+                                         delete=False, encoding="utf-8") as f:
+            f.write(html)
+            html_path = f.name
+
+        subprocess.Popen(
+            [edge, "--kiosk-printing", f"file:///{html_path.replace(chr(92), '/')}"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        time.sleep(10)
+        try:
+            os.unlink(html_path)
+        except Exception:
+            pass
         return True
     except Exception:
-        pass
-
-    # Method 4: cmd /c start /print
-    try:
-        subprocess.run(["cmd", "/c", "start", "", "/print", str(path)],
-                       capture_output=True, timeout=30)
-        return True
-    except Exception:
-        pass
-
-    # Method 5: PowerShell Start-Process
-    try:
-        subprocess.run([
-            "powershell", "-Command",
-            f"Start-Process -FilePath '{str(path)}' -Verb Print"
-        ], capture_output=True, timeout=30)
-        return True
-    except Exception:
-        pass
-
-    # Last resort: open file
-    try:
-        os.startfile(str(path))
-    except Exception:
-        pass
-    return False
+        return False
 
 
 def _print_office(path: Path) -> bool:
-    printer = _get_default_printer()
-    if printer:
-        try:
-            import win32api
-            result = win32api.ShellExecuteW(
-                None, "printto", str(path), f'"{printer}"', None, 0)
-            if result > 32:
-                return True
-        except Exception:
-            pass
-
+    """Print Word/Excel documents via ShellExecute."""
     try:
         os.startfile(str(path), "print")
         return True
